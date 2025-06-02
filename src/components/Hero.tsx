@@ -24,24 +24,23 @@ const Hero = () => {
           {/* Main Headline */}
           <h1 className="text-5xl md:text-7xl font-black mb-6 leading-tight animate-fade-in">
             <span className="bg-gradient-to-r from-green-400 via-blue-400 to-red-400 bg-clip-text text-transparent">
-              Where NBA Fans
+              The NBA's Fan-Powered
             </span>
             <br />
-            <span className="text-white">Settle Debates</span>
+            <span className="text-white">Power Rankings</span>
           </h1>
 
           {/* Subheadline */}
-          <p className="text-xl md:text-2xl text-gray-300 mb-8 max-w-3xl mx-auto leading-relaxed animate-fade-in">
-            Rank players. Vote on matchups. See how your takes stack up against the world.
-            <br />
-            <span className="text-green-400 font-semibold">Less noise than Twitter. More culture than ESPN.</span>
-          </p>
+          <div className="text-xl md:text-2xl text-gray-300 mb-8 max-w-3xl mx-auto leading-relaxed animate-fade-in space-y-2">
+            <p>Your voice matters. Your rankings count. Your data drives the conversation.</p>
+            <p className="text-green-400 font-semibold">The most comprehensive fan opinion database in basketball.</p>
+          </div>
 
           {/* Stats */}
           <div className="flex justify-center space-x-8 mb-12 animate-fade-in">
             <div className="text-center">
               <div className="text-3xl font-bold text-green-400">47K+</div>
-              <div className="text-gray-400">Hot Takes</div>
+              <div className="text-gray-400">Fan Votes</div>
             </div>
             <div className="text-center">
               <div className="text-3xl font-bold text-blue-400">12K+</div>
@@ -49,7 +48,7 @@ const Hero = () => {
             </div>
             <div className="text-center">
               <div className="text-3xl font-bold text-red-400">8.2K</div>
-              <div className="text-gray-400">Daily Voters</div>
+              <div className="text-gray-400">Daily Opinions</div>
             </div>
           </div>
 
@@ -59,13 +58,13 @@ const Hero = () => {
               size="lg" 
               className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-bold px-8 py-4 text-lg rounded-full transition-all duration-300 transform hover:scale-105"
             >
-              Start Ranking
+              Add Your Voice
               <ArrowRight className="ml-2" size={20} />
             </Button>
             <Button 
               variant="outline" 
               size="lg"
-              className="border-white/20 text-white hover:bg-white/10 font-bold px-8 py-4 text-lg rounded-full transition-all duration-300"
+              className="border-white/40 bg-white/10 text-white hover:bg-white/20 hover:border-white/60 font-bold px-8 py-4 text-lg rounded-full transition-all duration-300"
             >
               Check Live Rankings
             </Button>
@@ -75,15 +74,15 @@ const Hero = () => {
           <div className="flex flex-wrap justify-center gap-4 mt-12 animate-fade-in">
             <div className="flex items-center space-x-2 bg-white/5 backdrop-blur-sm rounded-full px-4 py-2 border border-white/10">
               <Zap className="text-yellow-400" size={16} />
-              <span className="text-sm">Real-time Rankings</span>
+              <span className="text-sm">Real-time Data</span>
             </div>
             <div className="flex items-center space-x-2 bg-white/5 backdrop-blur-sm rounded-full px-4 py-2 border border-white/10">
               <Users className="text-blue-400" size={16} />
-              <span className="text-sm">You vs The World</span>
+              <span className="text-sm">Fan-Powered</span>
             </div>
             <div className="flex items-center space-x-2 bg-white/5 backdrop-blur-sm rounded-full px-4 py-2 border border-white/10">
               <TrendingUp className="text-green-400" size={16} />
-              <span className="text-sm">Hot Take Tracker</span>
+              <span className="text-sm">Opinion Tracker</span>
             </div>
           </div>
         </div>

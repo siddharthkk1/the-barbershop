@@ -12,10 +12,10 @@ const CTA = () => {
             <span className="text-6xl mb-4 block">💈</span>
             <h2 className="text-4xl md:text-6xl font-black text-white mb-6">
               <span className="bg-gradient-to-r from-green-400 via-blue-400 to-red-400 bg-clip-text text-transparent">
-                Ready to Show
+                Think You Know Ball?
               </span>
               <br />
-              <span className="text-white">Your Basketball IQ?</span>
+              <span className="text-white">Prove It.</span>
             </h2>
           </div>
 

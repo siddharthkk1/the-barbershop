@@ -10,7 +10,7 @@ const Testimonials = () => {
       author: "@HoopsDreamer23",
       role: "Day 1 User",
       rating: 5,
-      highlight: "Had Ant top 5 before it was cool"
+      highlight: "Early on Edwards breakout"
     },
     {
       text: "Love how this captures real fan opinion vs media narratives. The consensus rankings hit different than ESPN's trash lists 💯",
