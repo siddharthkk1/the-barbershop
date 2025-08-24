@@ -1,9 +1,7 @@
-
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-// Removed per-position Select UI in favor of one global search and assign dialog
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -23,7 +21,7 @@ const YourTopTen = () => {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // New: assignment dialog state for placing a selected player into a position
+  // Assignment dialog state for placing a selected player into a position
   const [isAssignOpen, setIsAssignOpen] = useState(false);
   const [candidate, setCandidate] = useState<Player | null>(null);
 
@@ -226,7 +224,7 @@ const YourTopTen = () => {
         <div className="text-sm font-medium">Search players</div>
         <PlayerSearch
           onPick={handleStartAssign}
-          disabledIds={chosenPlayerIds} // prevent selecting someone already in the list
+          disabledIds={chosenPlayerIds}
         />
       </div>
 
@@ -262,7 +260,7 @@ const YourTopTen = () => {
                     className="text-xs"
                     onClick={() => handleChange(pos, null)}
                   >
-                    Clear
+                    Remove
                   </Button>
                 </>
               ) : (
