@@ -105,6 +105,7 @@ const YourTopTen = () => {
       setCandidateToAdd(player);
       setIsReplaceOpen(true);
     } else {
+      // Add player to the bottom of the list
       setPlayerIds(prev => [...prev, player.id]);
     }
   };
@@ -247,7 +248,7 @@ const YourTopTen = () => {
       {/* Draggable player list */}
       <div className="space-y-2">
         <div className="text-sm font-medium">
-          Your Top {Math.max(10, rankedPlayers.length)} ({rankedPlayers.length}/10)
+          Your Top 10 ({rankedPlayers.length}/10)
         </div>
         
         {rankedPlayers.length === 0 ? (
