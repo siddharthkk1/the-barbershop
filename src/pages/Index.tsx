@@ -18,10 +18,10 @@ const Index = () => {
       <CTA />
       <Footer />
       
-      {/* Auth link */}
+      {/* Rankings link */}
       <div className="fixed top-4 right-4 z-50">
-        <Link to="/auth">
-          <Button variant="outline">Sign In</Button>
+        <Link to="/rankings">
+          <Button variant="outline">Rankings</Button>
         </Link>
       </div>
     </div>

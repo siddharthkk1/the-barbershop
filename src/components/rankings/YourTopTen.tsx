@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
-import SignInForm from "./SignInForm";
+import { Loader2 } from "lucide-react";
 
 type Player = {
   id: string;
@@ -24,13 +24,17 @@ const positions = Array.from({ length: 10 }).map((_, idx) => idx + 1);
 const YourTopTen = () => {
   const { toast } = useToast();
   const [userId, setUserId] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       setUserId(data.user?.id ?? null);
+      setUserEmail(data.user?.email ?? null);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       setUserId(session?.user?.id ?? null);
+      setUserEmail(session?.user?.email ?? null);
     });
     return () => {
       sub.subscription.unsubscribe();
@@ -141,13 +145,46 @@ const YourTopTen = () => {
     rankingsQuery.refetch();
   };
 
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/rankings`,
+      },
+    });
+
+    setIsLoading(false);
+
+    if (error) {
+      toast({
+        title: "Google sign in failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    toast({ title: "Signed out" });
+  };
+
   if (!userId) {
     return (
       <div className="space-y-4">
-        <p className="text-sm text-muted-foreground">
-          Sign in to create and save your Top 10 rankings.
+        <p className="text-sm text-muted-foreground text-center">
+          Sign in to create and save your Top 10 rankings
         </p>
-        <SignInForm />
+        <Button
+          onClick={handleGoogleSignIn}
+          variant="outline"
+          className="w-full"
+          disabled={isLoading}
+        >
+          {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          Continue with Google
+        </Button>
       </div>
     );
   }
@@ -164,6 +201,19 @@ const YourTopTen = () => {
 
   return (
     <div className="space-y-4">
+      {/* Signed in indicator */}
+      <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-md">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+          <p className="text-sm font-medium text-green-800">
+            Signed in as {userEmail}
+          </p>
+        </div>
+        <Button variant="ghost" size="sm" onClick={handleSignOut}>
+          Sign out
+        </Button>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {positions.map((pos) => {
           const selectedId = selection[pos] ?? null;
