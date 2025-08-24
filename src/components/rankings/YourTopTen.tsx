@@ -1,12 +1,14 @@
+
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+// Removed per-position Select UI in favor of one global search and assign dialog
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import PlayerSearch, { Player } from "./PlayerSearch";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 type RankingRow = {
   player_id: string | null;
@@ -21,9 +23,9 @@ const YourTopTen = () => {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // New: dialog state for search picker
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [activePosition, setActivePosition] = useState<number | null>(null);
+  // New: assignment dialog state for placing a selected player into a position
+  const [isAssignOpen, setIsAssignOpen] = useState(false);
+  const [candidate, setCandidate] = useState<Player | null>(null);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -44,7 +46,7 @@ const YourTopTen = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("nba_players")
-        .select("id,name,team,position")
+        .select("id,name,team,position,image_url")
         .order("name", { ascending: true });
       if (error) throw error;
       return data ?? [];
@@ -148,17 +150,29 @@ const YourTopTen = () => {
     toast({ title: "Signed out" });
   };
 
-  const openSearchForPosition = (pos: number) => {
-    setActivePosition(pos);
-    setIsSearchOpen(true);
+  // New: start assignment flow when a player is picked from global search
+  const handleStartAssign = (player: Player) => {
+    setCandidate(player);
+    setIsAssignOpen(true);
   };
 
-  const handlePickFromSearch = (player: Player) => {
-    if (activePosition != null) {
-      handleChange(activePosition, player.id);
-    }
-    setIsSearchOpen(false);
-    setActivePosition(null);
+  // New: assign currently selected candidate to chosen position (move if already placed)
+  const handleAssignPosition = (pos: number) => {
+    if (!candidate) return;
+    const candidateId = candidate.id;
+    setSelection((prev) => {
+      const next = { ...prev };
+      // Remove candidate from any previous position
+      for (const key of Object.keys(next)) {
+        const k = Number(key);
+        if (next[k] === candidateId) next[k] = null;
+      }
+      // Place into selected position (overwrites if occupied)
+      next[pos] = candidateId;
+      return next;
+    });
+    setIsAssignOpen(false);
+    setCandidate(null);
   };
 
   if (!userId) {
@@ -189,9 +203,11 @@ const YourTopTen = () => {
   }
 
   const players = playersQuery.data ?? [];
+  const getPlayerById = (id: string | null | undefined) =>
+    id ? players.find((p) => p.id === id) ?? null : null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* Signed in indicator */}
       <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-md">
         <div className="flex items-center gap-2">
@@ -205,48 +221,58 @@ const YourTopTen = () => {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {/* One global search */}
+      <div className="space-y-2">
+        <div className="text-sm font-medium">Search players</div>
+        <PlayerSearch
+          onPick={handleStartAssign}
+          disabledIds={chosenPlayerIds} // prevent selecting someone already in the list
+        />
+      </div>
+
+      {/* Single-column list of positions, resembling collective rankings */}
+      <div className="space-y-2">
         {positions.map((pos) => {
-          const selectedId = selection[pos] ?? null;
+          const playerId = selection[pos] ?? null;
+          const player = getPlayerById(playerId);
           return (
-            <div key={pos} className="flex items-center gap-3">
-              <div className="w-6 text-right font-semibold">{pos}</div>
-              <Select
-                value={selectedId ?? ""}
-                onValueChange={(val) => handleChange(pos, val || null)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select player" />
-                </SelectTrigger>
-                <SelectContent>
-                  {players.map((p) => (
-                    <SelectItem
-                      key={p.id}
-                      value={p.id}
-                      disabled={selectedId !== p.id && chosenPlayerIds.has(p.id)}
-                    >
-                      {p.name} • {p.team ?? "—"} • {p.position ?? "—"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div
+              key={pos}
+              className="flex items-center gap-3 p-3 rounded-md border bg-card text-card-foreground"
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-sm font-semibold">
+                {pos}
+              </div>
 
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => openSearchForPosition(pos)}
-              >
-                Search
-              </Button>
-
-              {selectedId && (
-                <Button
-                  variant="ghost"
-                  className="text-xs"
-                  onClick={() => handleChange(pos, null)}
-                >
-                  Clear
-                </Button>
+              {player ? (
+                <>
+                  <Avatar className="h-9 w-9">
+                    <AvatarImage src={player.image_url ?? undefined} alt={player.name} />
+                    <AvatarFallback>{player.name?.slice(0, 2).toUpperCase() ?? "PL"}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate font-medium">{player.name}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {player.team ?? "—"} • {player.position ?? "—"}
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => handleChange(pos, null)}
+                  >
+                    Clear
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate text-sm text-muted-foreground">
+                      Empty — select a player above, then choose where to place them
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           );
@@ -257,17 +283,41 @@ const YourTopTen = () => {
         <Button onClick={handleSave}>Save rankings</Button>
       </div>
 
-      <Dialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
+      {/* Assign position dialog */}
+      <Dialog open={isAssignOpen} onOpenChange={setIsAssignOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              {activePosition ? `Select player for #${activePosition}` : "Select player"}
+              {candidate ? `Choose a position for ${candidate.name}` : "Choose a position"}
             </DialogTitle>
           </DialogHeader>
-          <PlayerSearch
-            onPick={handlePickFromSearch}
-            disabledIds={chosenPlayerIds}
-          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {positions.map((pos) => {
+              const occupant = getPlayerById(selection[pos] ?? null);
+              return (
+                <Button
+                  key={pos}
+                  variant={occupant ? "secondary" : "outline"}
+                  className="justify-start h-auto py-3"
+                  onClick={() => handleAssignPosition(pos)}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-xs font-semibold">
+                      {pos}
+                    </div>
+                    <div className="text-left">
+                      <div className="text-sm font-medium">
+                        {occupant ? occupant.name : "Empty slot"}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {occupant ? `${occupant.team ?? "—"} • ${occupant.position ?? "—"}` : "Click to place here"}
+                      </div>
+                    </div>
+                  </div>
+                </Button>
+              );
+            })}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

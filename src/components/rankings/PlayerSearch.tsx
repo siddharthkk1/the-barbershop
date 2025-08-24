@@ -53,7 +53,15 @@ const PlayerSearch = ({ onPick, disabledIds, initialQuery = "" }: PlayerSearchPr
     },
   });
 
-  const list = data ?? [];
+  // De-duplicate results by id (extra safety even after DB cleanup/constraint)
+  const list = (() => {
+    const arr = data ?? [];
+    const map = new Map<string, Player>();
+    for (const p of arr) {
+      if (!map.has(p.id)) map.set(p.id, p);
+    }
+    return Array.from(map.values());
+  })();
 
   return (
     <div className="space-y-4">
@@ -86,7 +94,7 @@ const PlayerSearch = ({ onPick, disabledIds, initialQuery = "" }: PlayerSearchPr
           No players found. Try a different search.
         </div>
       ) : (
-        <ul className="space-y-3 max-h-[60vh] overflow-auto pr-1">
+        <ul className="space-y-3 max-h-[50vh] overflow-auto pr-1">
           {list.map((p) => {
             const disabled = !!disabledIds && disabledIds.has(p.id);
             return (
