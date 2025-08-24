@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Link, useLocation } from "react-router-do
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Rankings from "./pages/Rankings";
+import Auth from "./pages/Auth";
 
 const queryClient = new QueryClient();
 
@@ -33,6 +34,7 @@ const App = () => (
         <FloatingRankingsLink />
         <Routes>
           <Route path="/" element={<Index />} />
+          <Route path="/auth" element={<Auth />} />
           <Route path="/rankings" element={<Rankings />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
