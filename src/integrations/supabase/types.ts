@@ -14,10 +14,90 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      nba_players: {
+        Row: {
+          created_at: string
+          id: string
+          image_url: string | null
+          name: string
+          position: string | null
+          team: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          name: string
+          position?: string | null
+          team?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          name?: string
+          position?: string | null
+          team?: string | null
+        }
+        Relationships: []
+      }
+      user_rankings: {
+        Row: {
+          created_at: string
+          id: string
+          player_id: string | null
+          rank_position: number
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          player_id?: string | null
+          rank_position: number
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          player_id?: string | null
+          rank_position?: number
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_rankings_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "collective_rankings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_rankings_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "nba_players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
-      [_ in never]: never
+      collective_rankings: {
+        Row: {
+          avg_rank: number | null
+          collective_rank: number | null
+          id: string | null
+          image_url: string | null
+          name: string | null
+          position: string | null
+          team: string | null
+          vote_count: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       [_ in never]: never
