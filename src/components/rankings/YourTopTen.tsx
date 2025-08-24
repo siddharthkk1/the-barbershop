@@ -147,9 +147,13 @@ const YourTopTen = () => {
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
+    
+    // Detect if we're in localhost (Lovable editor)
+    const isLocalhost = window.location.origin.includes('localhost');
+    
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: {
+      options: isLocalhost ? {} : {
         redirectTo: `${window.location.origin}/rankings`,
       },
     });
