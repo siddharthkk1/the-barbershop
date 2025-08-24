@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -6,13 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
-
-type Player = {
-  id: string;
-  name: string;
-  team: string | null;
-  position: string | null;
-};
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import PlayerSearch, { Player } from "./PlayerSearch";
 
 type RankingRow = {
   player_id: string | null;
@@ -26,6 +20,10 @@ const YourTopTen = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // New: dialog state for search picker
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [activePosition, setActivePosition] = useState<number | null>(null);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -43,33 +41,25 @@ const YourTopTen = () => {
 
   const playersQuery = useQuery({
     queryKey: ["nba_players"],
-    queryFn: async (): Promise<Player[]> => {
-      console.log("[YourTopTen] Fetching nba_players...");
+    queryFn: async () => {
       const { data, error } = await supabase
         .from("nba_players")
         .select("id,name,team,position")
         .order("name", { ascending: true });
-      if (error) {
-        console.error("[YourTopTen] nba_players error:", error);
-        throw error;
-      }
-      return (data ?? []) as Player[];
+      if (error) throw error;
+      return data ?? [];
     },
   });
 
   const rankingsQuery = useQuery({
     queryKey: ["user_rankings", userId],
     enabled: !!userId,
-    queryFn: async (): Promise<RankingRow[]> => {
-      console.log("[YourTopTen] Fetching user_rankings for user:", userId);
+    queryFn: async () => {
       const { data, error } = await supabase
         .from("user_rankings")
         .select("player_id,rank_position")
         .eq("user_id", userId);
-      if (error) {
-        console.error("[YourTopTen] user_rankings error:", error);
-        throw error;
-      }
+      if (error) throw error;
       return data ?? [];
     },
   });
@@ -81,7 +71,7 @@ const YourTopTen = () => {
   useEffect(() => {
     if (rankingsQuery.data && rankingsQuery.data.length > 0) {
       const prefill: Record<number, string | null> = {};
-      rankingsQuery.data.forEach((r) => {
+      rankingsQuery.data.forEach((r: RankingRow) => {
         prefill[r.rank_position] = r.player_id;
       });
       setSelection(prefill);
@@ -96,7 +86,6 @@ const YourTopTen = () => {
   const handleChange = (pos: number, playerId: string | null) => {
     setSelection((prev) => {
       const next = { ...prev };
-      // remove previous selection to allow re-assigning a player to another slot
       const prevAtPos = prev[pos];
       if (prevAtPos && prevAtPos === playerId) return prev;
       next[pos] = playerId;
@@ -109,7 +98,6 @@ const YourTopTen = () => {
       toast({ title: "Please sign in", description: "Sign in to save your rankings.", variant: "destructive" });
       return;
     }
-    // Validate uniqueness and completeness (optional: allow partial)
     const nonNullEntries = Object.entries(selection).filter(([, v]) => !!v) as [string, string][];
     const uniqueSet = new Set(nonNullEntries.map(([, v]) => v));
     if (uniqueSet.size !== nonNullEntries.length) {
@@ -120,46 +108,32 @@ const YourTopTen = () => {
       });
       return;
     }
-
     const rows = nonNullEntries.map(([posStr, player_id]) => ({
       user_id: userId,
       rank_position: Number(posStr),
       player_id,
     }));
-
-    console.log("[YourTopTen] Upserting rows:", rows);
-
     const { error } = await supabase
       .from("user_rankings")
-      .upsert(rows, {
-        onConflict: "user_id,rank_position",
-      });
-
+      .upsert(rows, { onConflict: "user_id,rank_position" });
     if (error) {
-      console.error("[YourTopTen] upsert error:", error);
       toast({ title: "Save failed", description: error.message, variant: "destructive" });
       return;
     }
-
     toast({ title: "Rankings saved", description: "Your Top 10 has been saved successfully." });
     rankingsQuery.refetch();
   };
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
-    
-    // Detect if we're in localhost (Lovable editor)
     const isLocalhost = window.location.origin.includes('localhost');
-    
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: isLocalhost ? {} : {
         redirectTo: `${window.location.origin}/rankings`,
       },
     });
-
     setIsLoading(false);
-
     if (error) {
       toast({
         title: "Google sign in failed",
@@ -172,6 +146,19 @@ const YourTopTen = () => {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     toast({ title: "Signed out" });
+  };
+
+  const openSearchForPosition = (pos: number) => {
+    setActivePosition(pos);
+    setIsSearchOpen(true);
+  };
+
+  const handlePickFromSearch = (player: Player) => {
+    if (activePosition != null) {
+      handleChange(activePosition, player.id);
+    }
+    setIsSearchOpen(false);
+    setActivePosition(null);
   };
 
   if (!userId) {
@@ -243,6 +230,15 @@ const YourTopTen = () => {
                   ))}
                 </SelectContent>
               </Select>
+
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => openSearchForPosition(pos)}
+              >
+                Search
+              </Button>
+
               {selectedId && (
                 <Button
                   variant="ghost"
@@ -260,6 +256,20 @@ const YourTopTen = () => {
       <div className="flex justify-end">
         <Button onClick={handleSave}>Save rankings</Button>
       </div>
+
+      <Dialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {activePosition ? `Select player for #${activePosition}` : "Select player"}
+            </DialogTitle>
+          </DialogHeader>
+          <PlayerSearch
+            onPick={handlePickFromSearch}
+            disabledIds={chosenPlayerIds}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

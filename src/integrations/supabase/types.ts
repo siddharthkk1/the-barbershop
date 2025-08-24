@@ -16,28 +16,52 @@ export type Database = {
     Tables: {
       nba_players: {
         Row: {
+          birth_date: string | null
+          college: string | null
+          country: string | null
           created_at: string
+          height: string | null
           id: string
           image_url: string | null
+          jersey_number: number | null
           name: string
           position: string | null
+          stats: Json | null
           team: string | null
+          weight: number | null
+          years_pro: number | null
         }
         Insert: {
+          birth_date?: string | null
+          college?: string | null
+          country?: string | null
           created_at?: string
+          height?: string | null
           id?: string
           image_url?: string | null
+          jersey_number?: number | null
           name: string
           position?: string | null
+          stats?: Json | null
           team?: string | null
+          weight?: number | null
+          years_pro?: number | null
         }
         Update: {
+          birth_date?: string | null
+          college?: string | null
+          country?: string | null
           created_at?: string
+          height?: string | null
           id?: string
           image_url?: string | null
+          jersey_number?: number | null
           name?: string
           position?: string | null
+          stats?: Json | null
           team?: string | null
+          weight?: number | null
+          years_pro?: number | null
         }
         Relationships: []
       }
