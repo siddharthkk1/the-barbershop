@@ -66,7 +66,7 @@ const PlayerSearch = ({ onAdd, disabledIds, initialQuery = "" }: PlayerSearchPro
   })();
 
   return (
-    <div className="space-y-4">
+    <div className="relative">
       <div>
         <Input
           value={query}
@@ -77,9 +77,9 @@ const PlayerSearch = ({ onAdd, disabledIds, initialQuery = "" }: PlayerSearchPro
       </div>
 
       {shouldShowResults && (
-        <>
+        <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-background border rounded-md shadow-lg max-h-[50vh] overflow-hidden">
           {isLoading || isFetching ? (
-            <div className="space-y-3">
+            <div className="p-4 space-y-3">
               {Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-3">
                   <Skeleton className="h-10 w-10 rounded-full" />
@@ -92,47 +92,49 @@ const PlayerSearch = ({ onAdd, disabledIds, initialQuery = "" }: PlayerSearchPro
               ))}
             </div>
           ) : error ? (
-            <div className="text-sm text-destructive">Failed to load players.</div>
+            <div className="p-4 text-sm text-destructive">Failed to load players.</div>
           ) : list.length === 0 ? (
-            <div className="text-sm text-muted-foreground">
+            <div className="p-4 text-sm text-muted-foreground">
               No players found. Try a different search.
             </div>
           ) : (
-            <ul className="space-y-3 max-h-[50vh] overflow-auto pr-1">
-              {list.map((p) => {
-                const disabled = !!disabledIds && disabledIds.has(p.id);
-                return (
-                  <li key={p.id} className="flex items-center gap-3">
-                    <Avatar className="h-10 w-10">
-                      <AvatarImage src={p.image_url ?? undefined} alt={p.name} />
-                      <AvatarFallback>{p.name?.slice(0, 2).toUpperCase() ?? "PL"}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate">{p.name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {p.team ?? "—"} • {p.position ?? "—"}
+            <div className="overflow-auto max-h-[45vh]">
+              <ul className="p-2 space-y-2">
+                {list.map((p) => {
+                  const disabled = !!disabledIds && disabledIds.has(p.id);
+                  return (
+                    <li key={p.id} className="flex items-center gap-3 p-2 rounded hover:bg-muted/50">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={p.image_url ?? undefined} alt={p.name} />
+                        <AvatarFallback>{p.name?.slice(0, 2).toUpperCase() ?? "PL"}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate">{p.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {p.team ?? "—"} • {p.position ?? "—"}
+                        </div>
                       </div>
-                    </div>
-                    <Button
-                      variant={disabled ? "secondary" : "default"}
-                      disabled={disabled}
-                      onClick={() => onAdd(p)}
-                      size="sm"
-                    >
-                      {disabled ? "Added" : "Add"}
-                    </Button>
-                  </li>
-                );
-              })}
-            </ul>
+                      <Button
+                        variant={disabled ? "secondary" : "default"}
+                        disabled={disabled}
+                        onClick={() => onAdd(p)}
+                        size="sm"
+                      >
+                        {disabled ? "Added" : "Add"}
+                      </Button>
+                    </li>
+                  );
+                })}
+              </ul>
+              
+              <div className="p-2 border-t bg-muted/20">
+                <Button variant="outline" size="sm" onClick={() => refetch()} className="w-full">
+                  Refresh
+                </Button>
+              </div>
+            </div>
           )}
-
-          <div className="flex justify-end">
-            <Button variant="outline" size="sm" onClick={() => refetch()}>
-              Refresh
-            </Button>
-          </div>
-        </>
+        </div>
       )}
     </div>
   );
