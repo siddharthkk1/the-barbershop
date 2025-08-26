@@ -5,28 +5,28 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Users } from "lucide-react";
 
-type CollectiveRow = {
+type CollectiveRankingRow = {
   id: string | null;
+  avg_rank: number | null;
+  vote_count: number | null;
+  collective_rank: number | null;
   name: string | null;
   team: string | null;
   position: string | null;
   image_url: string | null;
-  avg_rank: number | null;
-  vote_count: number | null;
-  collective_rank: number | null;
 };
 
 const CollectiveTopTen = () => {
   const { data, isLoading, error } = useQuery({
     queryKey: ["collective-top10"],
-    queryFn: async (): Promise<CollectiveRow[]> => {
+    queryFn: async (): Promise<CollectiveRankingRow[]> => {
       console.log("[CollectiveTopTen] Fetching via RPC get_collective_rankings...");
       const { data, error } = await supabase.rpc("get_collective_rankings");
       if (error) {
         console.error("[CollectiveTopTen] RPC error:", error);
         throw error;
       }
-      return (data ?? []) as CollectiveRow[];
+      return (data ?? []) as CollectiveRankingRow[];
     },
   });
 
