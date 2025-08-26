@@ -21,7 +21,7 @@ const CollectiveTopTen = () => {
     queryKey: ["collective-top10"],
     queryFn: async (): Promise<CollectiveRankingRow[]> => {
       console.log("[CollectiveTopTen] Fetching via RPC get_collective_rankings...");
-      const { data, error } = await supabase.rpc("get_collective_rankings");
+      const { data, error } = await (supabase as any).rpc("get_collective_rankings");
       if (error) {
         console.error("[CollectiveTopTen] RPC error:", error);
         throw error;
