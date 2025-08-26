@@ -20,16 +20,13 @@ const CollectiveTopTen = () => {
   const { data, isLoading, error } = useQuery({
     queryKey: ["collective-top10"],
     queryFn: async (): Promise<CollectiveRow[]> => {
-      console.log("[CollectiveTopTen] Fetching collective_rankings...");
-      const { data, error } = await supabase
-        .from("collective_rankings")
-        .select("*")
-        .order("collective_rank", { ascending: true });
+      console.log("[CollectiveTopTen] Fetching via RPC get_collective_rankings...");
+      const { data, error } = await supabase.rpc("get_collective_rankings");
       if (error) {
-        console.error("[CollectiveTopTen] Error:", error);
+        console.error("[CollectiveTopTen] RPC error:", error);
         throw error;
       }
-      return data ?? [];
+      return (data ?? []) as CollectiveRow[];
     },
   });
 
@@ -80,7 +77,7 @@ const CollectiveTopTen = () => {
           </div>
           <div className="text-right">
             <div className="text-xs text-muted-foreground">Avg rank</div>
-            <div className="font-medium">{row.avg_rank?.toFixed(2)}</div>
+            <div className="font-medium">{row.avg_rank != null ? row.avg_rank.toFixed(2) : "—"}</div>
             <div className="text-xs text-muted-foreground">{row.vote_count} votes</div>
           </div>
         </li>
