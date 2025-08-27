@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Loader2 } from "lucide-react";
 import PlayerSearch, { Player } from "./PlayerSearch";
 import DraggablePlayerItem from "./DraggablePlayerItem";
 import {
@@ -28,12 +29,11 @@ type RankingRow = {
   rank_position: number;
 };
 
-interface YourTopTenProps {
-  userId: string | null;
-}
-
-const YourTopTen = ({ userId }: YourTopTenProps) => {
+const YourTopTen = () => {
   const { toast } = useToast();
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Replacement dialog state for when stack is full
   const [isReplaceOpen, setIsReplaceOpen] = useState(false);
@@ -45,6 +45,39 @@ const YourTopTen = ({ userId }: YourTopTenProps) => {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+
+  // Authentication effect
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUserId(data.user?.id ?? null);
+      setUserEmail(data.user?.email ?? null);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserId(session?.user?.id ?? null);
+      setUserEmail(session?.user?.email ?? null);
+    });
+    return () => {
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `https://hoop-take-tracker.lovable.app/rankings`,
+      },
+    });
+    setIsLoading(false);
+    if (error) {
+      toast({
+        title: "Google sign in failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
 
   const playersQuery = useQuery({
     queryKey: ["nba_players"],
@@ -172,14 +205,24 @@ const YourTopTen = ({ userId }: YourTopTenProps) => {
     rankingsQuery.refetch();
   };
 
-  // Authentication status display
+  // Authentication status display - show sign-in button in card when not signed in
   if (!userId) {
     return (
       <div className="space-y-4">
         <div className="p-6 bg-muted/50 border rounded-md text-center">
-          <p className="text-muted-foreground">
-            Sign in using the button in the top-right corner to create and save your Top 10 rankings.
+          <p className="text-muted-foreground mb-4">
+            Sign in to create and save your Top 10 rankings.
           </p>
+          <Button
+            onClick={handleGoogleSignIn}
+            variant="default"
+            size="sm"
+            disabled={isLoading}
+            className="shadow-sm"
+          >
+            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Sign in with Google
+          </Button>
         </div>
       </div>
     );
