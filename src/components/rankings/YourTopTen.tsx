@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -139,9 +138,6 @@ const YourTopTen = () => {
     }
   };
 
-  // Updated save logic to avoid duplicate key violations:
-  // 1) Delete user's existing rankings
-  // 2) Insert the new ordered rankings
   const handleSave = async () => {
     if (!userId) {
       toast({ title: "Please sign in", description: "Sign in to save your rankings.", variant: "destructive" });
@@ -191,10 +187,9 @@ const YourTopTen = () => {
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
-    const isLocalhost = window.location.origin.includes('localhost');
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: isLocalhost ? {} : {
+      options: {
         redirectTo: `${window.location.origin}/rankings`,
       },
     });
