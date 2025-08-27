@@ -139,24 +139,49 @@ const YourTopTen = () => {
     }
   };
 
+  // Updated save logic to avoid duplicate key violations:
+  // 1) Delete user's existing rankings
+  // 2) Insert the new ordered rankings
   const handleSave = async () => {
     if (!userId) {
       toast({ title: "Please sign in", description: "Sign in to save your rankings.", variant: "destructive" });
       return;
     }
 
+    console.log("[YourTopTen] Saving rankings for user:", userId);
+
+    // Delete existing rankings for this user
+    const { error: delErr } = await supabase
+      .from("user_rankings")
+      .delete()
+      .eq("user_id", userId);
+
+    if (delErr) {
+      console.error("[YourTopTen] Delete failed:", delErr);
+      toast({ title: "Save failed", description: delErr.message, variant: "destructive" });
+      return;
+    }
+
+    if (playerIds.length === 0) {
+      toast({ title: "Rankings saved", description: "Your rankings have been cleared." });
+      rankingsQuery.refetch();
+      return;
+    }
+
+    // Insert the new list
     const rows = playerIds.map((player_id, index) => ({
       user_id: userId,
       rank_position: index + 1,
       player_id,
     }));
 
-    const { error } = await supabase
+    const { error: insErr } = await supabase
       .from("user_rankings")
-      .upsert(rows, { onConflict: "user_id,rank_position" });
-    
-    if (error) {
-      toast({ title: "Save failed", description: error.message, variant: "destructive" });
+      .insert(rows);
+
+    if (insErr) {
+      console.error("[YourTopTen] Insert failed:", insErr);
+      toast({ title: "Save failed", description: insErr.message, variant: "destructive" });
       return;
     }
     

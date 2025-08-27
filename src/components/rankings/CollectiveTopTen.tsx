@@ -22,11 +22,62 @@ const CollectiveTopTen = () => {
     queryFn: async (): Promise<CollectiveRankingRow[]> => {
       console.log("[CollectiveTopTen] Fetching via RPC get_collective_rankings...");
       const { data, error } = await (supabase as any).rpc("get_collective_rankings");
-      if (error) {
-        console.error("[CollectiveTopTen] RPC error:", error);
-        throw error;
+
+      if (!error && Array.isArray(data)) {
+        return (data ?? []) as CollectiveRankingRow[];
       }
-      return (data ?? []) as CollectiveRankingRow[];
+
+      console.warn(
+        "[CollectiveTopTen] RPC unavailable or failed, falling back to client-side aggregation.",
+        error
+      );
+
+      // Fallback: compute rankings on the client if RPC is missing
+      const [{ data: rankings, error: rErr }, { data: players, error: pErr }] = await Promise.all([
+        supabase.from("user_rankings").select("player_id,rank_position"),
+        supabase.from("nba_players").select("id,name,team,position,image_url"),
+      ]);
+
+      if (rErr) {
+        console.error("[CollectiveTopTen] Failed to fetch user_rankings:", rErr);
+        throw rErr;
+      }
+      if (pErr) {
+        console.error("[CollectiveTopTen] Failed to fetch nba_players:", pErr);
+        throw pErr;
+      }
+
+      if (!rankings || rankings.length === 0) {
+        return [];
+      }
+
+      // Aggregate average rank and vote count by player
+      const agg = new Map<string, { sum: number; count: number }>();
+      for (const row of rankings) {
+        if (!row.player_id) continue;
+        const prev = agg.get(row.player_id) ?? { sum: 0, count: 0 };
+        agg.set(row.player_id, { sum: prev.sum + row.rank_position, count: prev.count + 1 });
+      }
+
+      const results: CollectiveRankingRow[] = Array.from(agg.entries()).map(([playerId, a]) => {
+        const p = players?.find((pl) => pl.id === playerId);
+        const avg = a.count > 0 ? a.sum / a.count : null;
+        return {
+          id: p?.id ?? playerId,
+          avg_rank: avg,
+          vote_count: a.count,
+          collective_rank: null,
+          name: p?.name ?? null,
+          team: p?.team ?? null,
+          position: p?.position ?? null,
+          image_url: p?.image_url ?? null,
+        };
+      });
+
+      results.sort((x, y) => (x.avg_rank ?? Infinity) - (y.avg_rank ?? Infinity));
+      results.forEach((row, i) => (row.collective_rank = i + 1));
+
+      return results.slice(0, 10);
     },
   });
 
