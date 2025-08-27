@@ -95,6 +95,13 @@ export type Database = {
             foreignKeyName: "user_rankings_player_id_fkey"
             columns: ["player_id"]
             isOneToOne: false
+            referencedRelation: "collective_rankings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_rankings_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
             referencedRelation: "nba_players"
             referencedColumns: ["id"]
           },
@@ -117,7 +124,19 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      get_collective_rankings: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          avg_rank: number
+          collective_rank: number
+          id: string
+          image_url: string
+          name: string
+          position: string
+          team: string
+          vote_count: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
