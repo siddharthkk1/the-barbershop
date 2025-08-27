@@ -1,11 +1,87 @@
 
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
+import { Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import CollectiveTopTen from "@/components/rankings/CollectiveTopTen";
 import YourTopTen from "@/components/rankings/YourTopTen";
 
 const Rankings = () => {
+  const { toast } = useToast();
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Authentication effect
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUserId(data.user?.id ?? null);
+      setUserEmail(data.user?.email ?? null);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserId(session?.user?.id ?? null);
+      setUserEmail(session?.user?.email ?? null);
+    });
+    return () => {
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `https://hoop-take-tracker.lovable.app/rankings`,
+      },
+    });
+    setIsLoading(false);
+    if (error) {
+      toast({
+        title: "Google sign in failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    toast({ title: "Signed out" });
+  };
+
   return (
-    <div className="container mx-auto px-4 py-10 animate-fade-in">
+    <div className="container mx-auto px-4 py-10 animate-fade-in relative">
+      {/* Authentication status in top-right corner */}
+      <div className="absolute top-4 right-4 z-10">
+        {userId ? (
+          <div className="flex items-center gap-3 px-4 py-2 bg-green-50 border border-green-200 rounded-lg shadow-sm">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <span className="text-sm font-medium text-green-800 hidden sm:inline">
+                {userEmail}
+              </span>
+            </div>
+            <Button variant="ghost" size="sm" onClick={handleSignOut}>
+              Sign out
+            </Button>
+          </div>
+        ) : (
+          <Button
+            onClick={handleGoogleSignIn}
+            variant="outline"
+            size="sm"
+            disabled={isLoading}
+            className="shadow-sm"
+          >
+            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Sign in
+          </Button>
+        )}
+      </div>
+
       <div className="mb-8 text-center">
         <h1 className="text-3xl font-bold tracking-tight">Top 10 NBA Player Rankings</h1>
         <p className="text-muted-foreground mt-2">
@@ -30,7 +106,7 @@ const Rankings = () => {
             <CardDescription>Create and manage your personal rankings</CardDescription>
           </CardHeader>
           <CardContent>
-            <YourTopTen />
+            <YourTopTen userId={userId} />
           </CardContent>
         </Card>
       </div>
