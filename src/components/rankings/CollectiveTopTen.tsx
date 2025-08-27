@@ -86,7 +86,7 @@ const CollectiveTopTen = () => {
       <div className="space-y-3">
         {Array.from({ length: 10 }).map((_, i) => (
           <div key={i} className="flex items-center gap-3">
-            <Skeleton className="h-12 w-12 rounded-full" />
+            <Skeleton className="h-14 w-14 rounded-full" />
             <div className="flex-1">
               <Skeleton className="h-4 w-1/3 mb-2" />
               <Skeleton className="h-3 w-1/4" />
@@ -116,7 +116,7 @@ const CollectiveTopTen = () => {
       {data.map((row, idx) => (
         <li key={`${row.id}-${idx}`} className="flex items-center gap-3">
           <div className="w-6 text-right font-semibold">{row.collective_rank ?? idx + 1}</div>
-          <Avatar className="h-12 w-12">
+          <Avatar className="h-14 w-14">
             <AvatarImage src={row.image_url ?? undefined} alt={row.name ?? "Player"} />
             <AvatarFallback>{row.name?.slice(0, 2).toUpperCase() ?? "PL"}</AvatarFallback>
           </Avatar>

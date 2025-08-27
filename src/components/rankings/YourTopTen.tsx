@@ -1,9 +1,9 @@
+
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
-import { Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import PlayerSearch, { Player } from "./PlayerSearch";
 import DraggablePlayerItem from "./DraggablePlayerItem";
@@ -28,11 +28,12 @@ type RankingRow = {
   rank_position: number;
 };
 
-const YourTopTen = () => {
+type YourTopTenProps = {
+  userId: string | null;
+};
+
+const YourTopTen = ({ userId }: YourTopTenProps) => {
   const { toast } = useToast();
-  const [userId, setUserId] = useState<string | null>(null);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
 
   // Replacement dialog state for when stack is full
   const [isReplaceOpen, setIsReplaceOpen] = useState(false);
@@ -44,20 +45,6 @@ const YourTopTen = () => {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUserId(data.user?.id ?? null);
-      setUserEmail(data.user?.email ?? null);
-    });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUserId(session?.user?.id ?? null);
-      setUserEmail(session?.user?.email ?? null);
-    });
-    return () => {
-      sub.subscription.unsubscribe();
-    };
-  }, []);
 
   const playersQuery = useQuery({
     queryKey: ["nba_players"],
@@ -185,44 +172,10 @@ const YourTopTen = () => {
     rankingsQuery.refetch();
   };
 
-  const handleGoogleSignIn = async () => {
-    setIsLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/rankings`,
-      },
-    });
-    setIsLoading(false);
-    if (error) {
-      toast({
-        title: "Google sign in failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    toast({ title: "Signed out" });
-  };
-
   if (!userId) {
     return (
-      <div className="space-y-4">
-        <p className="text-sm text-muted-foreground text-center">
-          Sign in to create and save your Top 10 rankings
-        </p>
-        <Button
-          onClick={handleGoogleSignIn}
-          variant="outline"
-          className="w-full"
-          disabled={isLoading}
-        >
-          {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Continue with Google
-        </Button>
+      <div className="text-center py-8 text-muted-foreground">
+        <p>Sign in above to create your rankings</p>
       </div>
     );
   }
@@ -243,28 +196,6 @@ const YourTopTen = () => {
 
   return (
     <div className="space-y-6">
-      {/* Signed in indicator */}
-      <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-md">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-          <p className="text-sm font-medium text-green-800">
-            Signed in as {userEmail}
-          </p>
-        </div>
-        <Button variant="ghost" size="sm" onClick={handleSignOut}>
-          Sign out
-        </Button>
-      </div>
-
-      {/* Player search */}
-      <div className="space-y-2">
-        <div className="text-sm font-medium">Add players to your rankings</div>
-        <PlayerSearch
-          onAdd={handleAddPlayer}
-          disabledIds={chosenPlayerIds}
-        />
-      </div>
-
       {/* Draggable player list */}
       <div className="space-y-2">
         <div className="text-sm font-medium">
@@ -274,7 +205,7 @@ const YourTopTen = () => {
         {rankedPlayers.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <p>No players added yet.</p>
-            <p className="text-xs">Search for players above to start building your rankings.</p>
+            <p className="text-xs">Search for players below to start building your rankings.</p>
           </div>
         ) : (
           <DndContext
@@ -296,6 +227,15 @@ const YourTopTen = () => {
             </SortableContext>
           </DndContext>
         )}
+      </div>
+
+      {/* Player search moved below the list */}
+      <div className="space-y-2">
+        <div className="text-sm font-medium">Add players to your rankings</div>
+        <PlayerSearch
+          onAdd={handleAddPlayer}
+          disabledIds={chosenPlayerIds}
+        />
       </div>
 
       {rankedPlayers.length > 0 && (

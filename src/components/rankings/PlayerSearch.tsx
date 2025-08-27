@@ -82,7 +82,7 @@ const PlayerSearch = ({ onAdd, disabledIds, initialQuery = "" }: PlayerSearchPro
             <div className="p-4 space-y-3">
               {Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="flex items-center gap-3">
-                  <Skeleton className="h-10 w-10 rounded-full" />
+                  <Skeleton className="h-12 w-12 rounded-full" />
                   <div className="flex-1">
                     <Skeleton className="h-4 w-1/3 mb-2" />
                     <Skeleton className="h-3 w-1/4" />
@@ -104,7 +104,7 @@ const PlayerSearch = ({ onAdd, disabledIds, initialQuery = "" }: PlayerSearchPro
                   const disabled = !!disabledIds && disabledIds.has(p.id);
                   return (
                     <li key={p.id} className="flex items-center gap-3 p-2 rounded hover:bg-muted/50">
-                      <Avatar className="h-10 w-10">
+                      <Avatar className="h-12 w-12">
                         <AvatarImage src={p.image_url ?? undefined} alt={p.name} />
                         <AvatarFallback>{p.name?.slice(0, 2).toUpperCase() ?? "PL"}</AvatarFallback>
                       </Avatar>
