@@ -36,8 +36,10 @@ type YourTopTenProps = {
   onGoogleSignIn: () => void;
 };
 
-const YourTopTen =({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTenProps) => {
+const YourTopTen = ({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTenProps) => {
   const { toast } = useToast();
+
+  console.log("[YourTopTen] Rendered with userId:", userId, "userEmail:", userEmail);
 
   // Replacement dialog state for when stack is full
   const [isReplaceOpen, setIsReplaceOpen] = useState(false);
@@ -178,6 +180,7 @@ const YourTopTen =({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTenP
 
   // Authentication status display - show sign-in button in card when not signed in
   if (!userId) {
+    console.log("[YourTopTen] Rendering sign-in UI");
     return (
       <div className="space-y-4">
         <div className="p-6 bg-muted/50 border rounded-md text-center">
@@ -212,6 +215,8 @@ const YourTopTen =({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTenP
     id ? players.find((p) => p.id === id) ?? null : null;
 
   const rankedPlayers = playerIds.map(id => getPlayerById(id)).filter(Boolean) as Player[];
+
+  console.log("[YourTopTen] Rendering rankings UI with", rankedPlayers.length, "players");
 
   return (
     <div className="space-y-6">
@@ -296,8 +301,8 @@ const YourTopTen =({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTenP
               </Button>
             ))}
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
     </div>
   );
 };

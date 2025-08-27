@@ -13,19 +13,35 @@ const Rankings = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [authStateLoaded, setAuthStateLoaded] = useState(false);
 
-  // Authentication effect
+  // Authentication effect with debugging
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUserId(data.user?.id ?? null);
-      setUserEmail(data.user?.email ?? null);
+    console.log("[Rankings] Setting up auth state listener");
+    
+    // Set up listener first
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("[Rankings] Auth state changed:", { event, hasSession: !!session, userId: session?.user?.id });
+      
+      // Use setTimeout to ensure proper state updates
+      setTimeout(() => {
+        setUserId(session?.user?.id ?? null);
+        setUserEmail(session?.user?.email ?? null);
+        setAuthStateLoaded(true);
+      }, 0);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+
+    // Then check current session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log("[Rankings] Initial session check:", { hasSession: !!session, userId: session?.user?.id });
       setUserId(session?.user?.id ?? null);
       setUserEmail(session?.user?.email ?? null);
+      setAuthStateLoaded(true);
     });
+
     return () => {
-      sub.subscription.unsubscribe();
+      console.log("[Rankings] Cleaning up auth listener");
+      subscription.unsubscribe();
     };
   }, []);
 
@@ -48,15 +64,19 @@ const Rankings = () => {
   };
 
   const handleSignOut = async () => {
+    console.log("[Rankings] Signing out user");
     await supabase.auth.signOut();
     toast({ title: "Signed out" });
   };
 
+  // Add key prop based on auth state to force re-render
+  const componentKey = `auth-${userId || 'anonymous'}-${authStateLoaded}`;
+
   return (
-    <div className="container mx-auto px-4 py-10 animate-fade-in relative">
+    <div key={componentKey} className="container mx-auto px-4 py-10 animate-fade-in relative">
       {/* Authentication status in top-right corner - only when signed in */}
-      {userId && (
-        <div className="absolute top-4 right-4 z-10">
+      {userId && authStateLoaded && (
+        <div className="fixed top-4 right-4 z-50">
           <div className="flex items-center gap-3 px-4 py-2 bg-green-50 border border-green-200 rounded-lg shadow-sm">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 bg-green-500 rounded-full"></div>
@@ -96,6 +116,7 @@ const Rankings = () => {
           </CardHeader>
           <CardContent>
             <YourTopTen 
+              key={`your-top-ten-${componentKey}`}
               userId={userId}
               userEmail={userEmail}
               isLoading={isLoading}
