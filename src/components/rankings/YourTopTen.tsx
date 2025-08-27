@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Loader2 } from "lucide-react";
 import PlayerSearch, { Player } from "./PlayerSearch";
 import DraggablePlayerItem from "./DraggablePlayerItem";
 import {
@@ -28,12 +29,11 @@ type RankingRow = {
   rank_position: number;
 };
 
-type YourTopTenProps = {
-  userId: string | null;
-};
-
-const YourTopTen = ({ userId }: YourTopTenProps) => {
+const YourTopTen = () => {
   const { toast } = useToast();
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Replacement dialog state for when stack is full
   const [isReplaceOpen, setIsReplaceOpen] = useState(false);
@@ -45,6 +45,44 @@ const YourTopTen = ({ userId }: YourTopTenProps) => {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+
+  // Authentication effect
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUserId(data.user?.id ?? null);
+      setUserEmail(data.user?.email ?? null);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserId(session?.user?.id ?? null);
+      setUserEmail(session?.user?.email ?? null);
+    });
+    return () => {
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `https://hoop-take-tracker.lovable.app/rankings`,
+      },
+    });
+    setIsLoading(false);
+    if (error) {
+      toast({
+        title: "Google sign in failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    toast({ title: "Signed out" });
+  };
 
   const playersQuery = useQuery({
     queryKey: ["nba_players"],
@@ -172,10 +210,23 @@ const YourTopTen = ({ userId }: YourTopTenProps) => {
     rankingsQuery.refetch();
   };
 
+  // Authentication status display
   if (!userId) {
     return (
-      <div className="text-center py-8 text-muted-foreground">
-        <p>Sign in above to create your rankings</p>
+      <div className="space-y-4">
+        <div className="p-4 bg-muted/50 border rounded-md text-center">
+          <p className="text-sm text-muted-foreground mb-3">
+            Sign in to create and save your Top 10 rankings
+          </p>
+          <Button
+            onClick={handleGoogleSignIn}
+            variant="outline"
+            disabled={isLoading}
+          >
+            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Continue with Google
+          </Button>
+        </div>
       </div>
     );
   }
@@ -196,6 +247,19 @@ const YourTopTen = ({ userId }: YourTopTenProps) => {
 
   return (
     <div className="space-y-6">
+      {/* Authentication status at the top */}
+      <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-md">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+          <p className="text-sm font-medium text-green-800">
+            Signed in as {userEmail}
+          </p>
+        </div>
+        <Button variant="ghost" size="sm" onClick={handleSignOut}>
+          Sign out
+        </Button>
+      </div>
+
       {/* Draggable player list */}
       <div className="space-y-2">
         <div className="text-sm font-medium">
