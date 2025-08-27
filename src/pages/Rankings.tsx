@@ -29,6 +29,24 @@ const Rankings = () => {
     };
   }, []);
 
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `https://hoop-take-tracker.lovable.app/rankings`,
+      },
+    });
+    setIsLoading(false);
+    if (error) {
+      toast({
+        title: "Google sign in failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     toast({ title: "Signed out" });
@@ -77,7 +95,12 @@ const Rankings = () => {
             <CardDescription>Create and manage your personal rankings</CardDescription>
           </CardHeader>
           <CardContent>
-            <YourTopTen />
+            <YourTopTen 
+              userId={userId}
+              userEmail={userEmail}
+              isLoading={isLoading}
+              onGoogleSignIn={handleGoogleSignIn}
+            />
           </CardContent>
         </Card>
       </div>

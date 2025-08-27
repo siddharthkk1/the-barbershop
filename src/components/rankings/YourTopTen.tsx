@@ -29,11 +29,15 @@ type RankingRow = {
   rank_position: number;
 };
 
-const YourTopTen = () => {
+type YourTopTenProps = {
+  userId: string | null;
+  userEmail: string | null;
+  isLoading: boolean;
+  onGoogleSignIn: () => void;
+};
+
+const YourTopTen =({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTenProps) => {
   const { toast } = useToast();
-  const [userId, setUserId] = useState<string | null>(null);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
 
   // Replacement dialog state for when stack is full
   const [isReplaceOpen, setIsReplaceOpen] = useState(false);
@@ -45,39 +49,6 @@ const YourTopTen = () => {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
-
-  // Authentication effect
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUserId(data.user?.id ?? null);
-      setUserEmail(data.user?.email ?? null);
-    });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUserId(session?.user?.id ?? null);
-      setUserEmail(session?.user?.email ?? null);
-    });
-    return () => {
-      sub.subscription.unsubscribe();
-    };
-  }, []);
-
-  const handleGoogleSignIn = async () => {
-    setIsLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `https://hoop-take-tracker.lovable.app/rankings`,
-      },
-    });
-    setIsLoading(false);
-    if (error) {
-      toast({
-        title: "Google sign in failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-  };
 
   const playersQuery = useQuery({
     queryKey: ["nba_players"],
@@ -214,7 +185,7 @@ const YourTopTen = () => {
             Sign in to create and save your Top 10 rankings.
           </p>
           <Button
-            onClick={handleGoogleSignIn}
+            onClick={onGoogleSignIn}
             variant="default"
             size="sm"
             disabled={isLoading}
