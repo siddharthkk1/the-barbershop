@@ -1,5 +1,6 @@
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
@@ -47,10 +48,14 @@ const Rankings = () => {
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
+    // Use dynamic URL instead of hardcoded one
+    const redirectUrl = `${window.location.origin}/rankings`;
+    console.log("[Rankings] Google OAuth redirect URL:", redirectUrl);
+    
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `https://hoop-take-tracker.lovable.app/rankings`,
+        redirectTo: redirectUrl,
       },
     });
     setIsLoading(false);
@@ -72,27 +77,41 @@ const Rankings = () => {
   // Add key prop based on auth state to force re-render
   const componentKey = `auth-${userId || 'anonymous'}-${authStateLoaded}`;
 
+  // Authentication status component - rendered via portal
+  const authStatusComponent = userId && authStateLoaded && (
+    <div 
+      className="fixed top-6 right-6 z-[99999]" 
+      style={{ 
+        position: 'fixed',
+        top: '1.5rem',
+        right: '1.5rem',
+        zIndex: 99999,
+        pointerEvents: 'auto'
+      }}
+    >
+      <div className="flex items-center gap-3 px-4 py-2 bg-white border-2 border-gray-300 rounded-lg shadow-2xl backdrop-blur-sm">
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+          <span className="text-sm font-medium text-gray-800 hidden sm:inline">
+            {userEmail}
+          </span>
+          <span className="text-sm font-medium text-gray-800 sm:hidden">
+            Signed in
+          </span>
+        </div>
+        <Button variant="ghost" size="sm" onClick={handleSignOut} className="text-xs h-8 px-3 hover:bg-gray-100">
+          Sign out
+        </Button>
+      </div>
+    </div>
+  );
+
   return (
     <>
-      {/* Authentication status in top-right corner - positioned absolutely */}
-      {userId && authStateLoaded && (
-        <div className="fixed top-6 right-6 z-[9999]">
-          <div className="flex items-center gap-3 px-4 py-2 bg-white border border-gray-200 rounded-lg shadow-lg backdrop-blur-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-sm font-medium text-gray-800 hidden sm:inline">
-                {userEmail}
-              </span>
-              <span className="text-sm font-medium text-gray-800 sm:hidden">
-                Signed in
-              </span>
-            </div>
-            <Button variant="ghost" size="sm" onClick={handleSignOut} className="text-xs h-7 px-2">
-              Sign out
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* Render auth status using portal to ensure it's outside normal flow */}
+      {typeof document !== 'undefined' && authStatusComponent && 
+        createPortal(authStatusComponent, document.body)
+      }
 
       <div key={componentKey} className="container mx-auto px-4 py-10 animate-fade-in relative">
         <div className="mb-8 text-center">
