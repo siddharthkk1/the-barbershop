@@ -8,7 +8,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
 Deno.serve(async (req) => {
@@ -20,7 +20,8 @@ Deno.serve(async (req) => {
     });
   }
 
-  if (req.method !== "GET") {
+  // Allow both GET and POST (supabase.functions.invoke uses POST by default)
+  if (req.method !== "GET" && req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method Not Allowed" }), {
       status: 405,
       headers: { 
