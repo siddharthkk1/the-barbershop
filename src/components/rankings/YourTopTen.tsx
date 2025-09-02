@@ -1,322 +1,360 @@
-import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { reorderPlayers } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2 } from "lucide-react";
-import PlayerSearch, { Player } from "./PlayerSearch";
-import DraggablePlayerItem from "./DraggablePlayerItem";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { DragDropContext, Droppable, Draggable, DropResult } from "react-beautiful-dnd";
+import { Loader2, User, GripVertical } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
 import CustomGoogleButton from "@/components/auth/CustomGoogleButton";
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
 
-type RankingRow = {
-  player_id: string | null;
-  rank_position: number;
-};
-
-type YourTopTenProps = {
+interface YourTopTenProps {
   userId: string | null;
   userEmail: string | null;
   isLoading: boolean;
   onGoogleSignIn: () => void;
-};
+}
+
+interface Player {
+  id: number;
+  name: string;
+  ranking: number | null;
+}
 
 const YourTopTen = ({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTenProps) => {
   const { toast } = useToast();
-  const [useOfficialButton, setUseOfficialButton] = useState(true);
+  const queryClient = useQueryClient();
+  const [playerName, setPlayerName] = useState("");
+  const [isAddingPlayer, setIsAddingPlayer] = useState(false);
 
-  console.log("[YourTopTen] Rendered with userId:", userId, "userEmail:", userEmail);
-
-  // Replacement dialog state for when stack is full
-  const [isReplaceOpen, setIsReplaceOpen] = useState(false);
-  const [candidateToAdd, setCandidateToAdd] = useState<Player | null>(null);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
-
-  const playersQuery = useQuery({
-    queryKey: ["nba_players"],
+  // Fetch user's top ten players
+  const {
+    data: topTenPlayers,
+    isLoading: isLoadingTopTen,
+    isError: isErrorTopTen,
+    error: errorTopTen,
+  } = useQuery<Player[]>({
+    queryKey: ["topTenPlayers", userId],
     queryFn: async () => {
+      if (!userId) return [];
       const { data, error } = await supabase
-        .from("nba_players")
-        .select("id,name,team,position,image_url")
-        .order("name", { ascending: true });
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
+        .from("top_ten_players")
+        .select("*")
+        .eq("user_id", userId)
+        .order("ranking", { ascending: true });
 
-  const rankingsQuery = useQuery({
-    queryKey: ["user_rankings", userId],
+      if (error) {
+        console.error("Error fetching top ten players:", error);
+        throw error;
+      }
+      return data || [];
+    },
     enabled: !!userId,
-    queryFn: async () => {
+    retry: false,
+  });
+
+  // Add player mutation
+  const addPlayerMutation = useMutation({
+    mutationFn: async (name: string) => {
+      if (!userId) throw new Error("User not authenticated");
+      const nextRanking = (topTenPlayers?.length || 0) + 1;
       const { data, error } = await supabase
-        .from("user_rankings")
-        .select("player_id,rank_position")
-        .eq("user_id", userId);
-      if (error) throw error;
-      return data ?? [];
+        .from("top_ten_players")
+        .insert([{ user_id: userId, name, ranking: nextRanking }])
+        .select("*")
+        .single();
+
+      if (error) {
+        console.error("Error adding player:", error);
+        throw error;
+      }
+      return data;
+    },
+    onMutate: async (name: string) => {
+      setIsAddingPlayer(true);
+      await queryClient.cancelQueries({ queryKey: ["topTenPlayers", userId] });
+      const optimisticUpdate = [...(topTenPlayers || []), { id: -1, name, ranking: (topTenPlayers?.length || 0) + 1 }];
+      queryClient.setQueryData(["topTenPlayers", userId], optimisticUpdate);
+      return { optimisticUpdate };
+    },
+    onError: (_error, _name, context: any) => {
+      toast({
+        title: "Failed to add player",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+      queryClient.setQueryData(["topTenPlayers", userId], context.optimisticUpdate);
+    },
+    onSettled: () => {
+      setIsAddingPlayer(false);
+      queryClient.invalidateQueries({ queryKey: ["topTenPlayers", userId] });
     },
   });
 
-  // state: ordered list of player IDs
-  const [playerIds, setPlayerIds] = useState<string[]>([]);
+  // Update player rankings mutation
+  const updateRankingsMutation = useMutation({
+    mutationFn: async (updates: { id: number; ranking: number | null }[]) => {
+      if (!userId) throw new Error("User not authenticated");
+      const { data, error } = await supabase
+        .from("top_ten_players")
+        .upsert(
+          updates.map(({ id, ranking }) => ({ id, ranking, user_id: userId })),
+          { onConflict: "id" }
+        )
+        .select("*");
 
-  // Prefill from existing rankings when loaded
-  useEffect(() => {
-    if (rankingsQuery.data && rankingsQuery.data.length > 0) {
-      const sortedRankings = [...rankingsQuery.data]
-        .filter((r): r is RankingRow & { player_id: string } => !!r.player_id)
-        .sort((a, b) => a.rank_position - b.rank_position);
-      setPlayerIds(sortedRankings.map(r => r.player_id));
-    }
-  }, [rankingsQuery.data]);
+      if (error) {
+        console.error("Error updating rankings:", error);
+        throw error;
+      }
+      return data;
+    },
+    onError: () => {
+      toast({
+        title: "Failed to update rankings",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["topTenPlayers", userId] });
+    },
+  });
 
-  const chosenPlayerIds = useMemo(() => new Set(playerIds), [playerIds]);
+  // Delete player mutation
+  const deletePlayerMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const { error } = await supabase.from("top_ten_players").delete().eq("id", id);
+      if (error) {
+        console.error("Error deleting player:", error);
+        throw error;
+      }
+    },
+    onMutate: async (id: number) => {
+      await queryClient.cancelQueries({ queryKey: ["topTenPlayers", userId] });
+      const optimisticUpdate = (topTenPlayers || []).filter((player) => player.id !== id);
+      queryClient.setQueryData(["topTenPlayers", userId], optimisticUpdate);
+      return { optimisticUpdate };
+    },
+    onError: (_error, id, context: any) => {
+      toast({
+        title: "Failed to delete player",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+      queryClient.setQueryData(["topTenPlayers", userId], context.optimisticUpdate);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["topTenPlayers", userId] });
+    },
+  });
 
-  const handleAddPlayer = (player: Player) => {
-    if (playerIds.length >= 10) {
-      setCandidateToAdd(player);
-      setIsReplaceOpen(true);
-    } else {
-      setPlayerIds(prev => [...prev, player.id]);
-    }
-  };
-
-  const handleReplacePlayer = (positionIndex: number) => {
-    if (!candidateToAdd) return;
-    
-    setPlayerIds(prev => {
-      const newIds = [...prev];
-      newIds[positionIndex] = candidateToAdd.id;
-      return newIds;
-    });
-    
-    setIsReplaceOpen(false);
-    setCandidateToAdd(null);
-  };
-
-  const handleRemovePlayer = (playerId: string) => {
-    setPlayerIds(prev => prev.filter(id => id !== playerId));
-  };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-
-    if (over && active.id !== over.id) {
-      setPlayerIds(prev => {
-        const oldIndex = prev.indexOf(active.id as string);
-        const newIndex = prev.indexOf(over.id as string);
-        return arrayMove(prev, oldIndex, newIndex);
+  // Handlers
+  const handleAddPlayer = async () => {
+    if (playerName.trim() === "") return;
+    try {
+      await addPlayerMutation.mutateAsync(playerName);
+      setPlayerName("");
+    } catch (error: any) {
+      toast({
+        title: "Failed to add player",
+        description: error.message || "Please try again.",
+        variant: "destructive",
       });
     }
   };
 
-  const handleSave = async () => {
-    if (!userId) {
-      toast({ title: "Please sign in", description: "Sign in to save your rankings.", variant: "destructive" });
-      return;
+  const handleDeletePlayer = async (id: number) => {
+    try {
+      await deletePlayerMutation.mutateAsync(id);
+    } catch (error: any) {
+      toast({
+        title: "Failed to delete player",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
     }
+  };
 
-    console.log("[YourTopTen] Saving rankings for user:", userId);
+  const onDragEnd = async (result: DropResult) => {
+    if (!result.destination) return;
 
-    const { error: delErr } = await supabase
-      .from("user_rankings")
-      .delete()
-      .eq("user_id", userId);
+    const items = reorderPlayers(
+      topTenPlayers || [],
+      result.source.index,
+      result.destination.index
+    );
 
-    if (delErr) {
-      console.error("[YourTopTen] Delete failed:", delErr);
-      toast({ title: "Save failed", description: delErr.message, variant: "destructive" });
-      return;
-    }
-
-    if (playerIds.length === 0) {
-      toast({ title: "Rankings saved", description: "Your rankings have been cleared." });
-      rankingsQuery.refetch();
-      return;
-    }
-
-    const rows = playerIds.map((player_id, index) => ({
-      user_id: userId,
-      rank_position: index + 1,
-      player_id,
+    // Prepare updates for Supabase
+    const updates = items.map((player: any, index: number) => ({
+      id: player.id,
+      ranking: index + 1,
     }));
 
-    const { error: insErr } = await supabase
-      .from("user_rankings")
-      .insert(rows);
+    // Optimistically update the UI
+    queryClient.setQueryData(["topTenPlayers", userId], items);
 
-    if (insErr) {
-      console.error("[YourTopTen] Insert failed:", insErr);
-      toast({ title: "Save failed", description: insErr.message, variant: "destructive" });
-      return;
+    try {
+      // Call the updateRankingsMutation to update the rankings in Supabase
+      await updateRankingsMutation.mutateAsync(updates);
+    } catch (error: any) {
+      // If the mutation fails, revert the UI to the previous state
+      queryClient.setQueryData(["topTenPlayers", userId], topTenPlayers);
+      toast({
+        title: "Failed to update rankings",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
     }
-    
-    toast({ title: "Rankings saved", description: "Your Top 10 has been saved successfully." });
-    rankingsQuery.refetch();
   };
 
-  const handleGoogleSignInSuccess = () => {
-    console.log("[YourTopTen] Google sign-in successful");
-  };
-
-  const handleGoogleSignInError = (error: any) => {
-    console.error("[YourTopTen] Google sign-in error:", error);
-    // Fallback to custom button if official button fails
-    setUseOfficialButton(false);
-  };
-
-  // Authentication status display - show sign-in button in card when not signed in
   if (!userId) {
-    console.log("[YourTopTen] Rendering sign-in UI");
     return (
-      <div className="space-y-4">
-        <div className="p-6 bg-muted/50 border rounded-md text-center">
-          <p className="text-muted-foreground mb-4">
-            Sign in to create and save your Top 10 rankings.
-          </p>
-          <div className="max-w-sm mx-auto">
-            {useOfficialButton ? (
-              <GoogleSignInButton
-                onSuccess={handleGoogleSignInSuccess}
-                onError={handleGoogleSignInError}
-                disabled={isLoading}
-              />
-            ) : (
-              <CustomGoogleButton
-                onClick={onGoogleSignIn}
-                isLoading={isLoading}
-                disabled={isLoading}
-              />
-            )}
+      <div className="space-y-6">
+        <div className="text-center py-8">
+          <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+            <User className="h-8 w-8 text-primary" />
           </div>
+          <h3 className="text-xl font-semibold mb-2">Create Your Rankings</h3>
+          <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+            Sign in to create and save your personal NBA Top 10 player rankings. Join the community and see how your picks compare!
+          </p>
+        </div>
+        
+        <div className="space-y-4">
+          <GoogleSignInButton 
+            onSuccess={onGoogleSignIn}
+            disabled={isLoading}
+          />
+          
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-gray-200" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">or</span>
+            </div>
+          </div>
+          
+          <CustomGoogleButton 
+            onClick={onGoogleSignIn}
+            isLoading={isLoading}
+          />
         </div>
       </div>
     );
   }
 
-  if (playersQuery.isLoading || rankingsQuery.isLoading) {
-    return <p className="text-sm text-muted-foreground">Loading...</p>;
+  if (isLoadingTopTen) {
+    return (
+      <div className="space-y-4">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="flex items-center space-x-4">
+            <Skeleton className="h-10 w-10 rounded-full" />
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-[250px]" />
+              <Skeleton className="h-4 w-[200px]" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
   }
 
-  if (playersQuery.error) {
-    return <p className="text-sm text-destructive">Failed to load players.</p>;
+  if (isErrorTopTen) {
+    return (
+      <div className="text-center text-red-500">
+        Error: {errorTopTen?.message || "Failed to load players"}
+      </div>
+    );
   }
-
-  const players = playersQuery.data ?? [];
-  const getPlayerById = (id: string | null | undefined) =>
-    id ? players.find((p) => p.id === id) ?? null : null;
-
-  const rankedPlayers = playerIds.map(id => getPlayerById(id)).filter(Boolean) as Player[];
-
-  console.log("[YourTopTen] Rendering rankings UI with", rankedPlayers.length, "players");
 
   return (
-    <div className="space-y-6">
-      {/* Draggable player list */}
-      <div className="space-y-2">
-        <div className="text-sm font-medium">
-          Your Top 10 ({rankedPlayers.length}/10)
-        </div>
-        
-        {rankedPlayers.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
-            <p>No players added yet.</p>
-            <p className="text-xs">Search for players below to start building your rankings.</p>
-          </div>
-        ) : (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext items={playerIds} strategy={verticalListSortingStrategy}>
-              <div className="space-y-2">
-                {rankedPlayers.map((player, index) => (
-                  <DraggablePlayerItem
-                    key={player.id}
-                    player={player}
-                    position={index + 1}
-                    onRemove={handleRemovePlayer}
-                  />
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
-        )}
-      </div>
-
-      {/* Player search moved below the list */}
-      <div className="space-y-2">
-        <div className="text-sm font-medium">Add players to your rankings</div>
-        <PlayerSearch
-          onAdd={handleAddPlayer}
-          disabledIds={chosenPlayerIds}
+    <div className="space-y-4">
+      <div className="flex items-center">
+        <Input
+          type="text"
+          value={playerName}
+          onChange={(e) => setPlayerName(e.target.value)}
+          placeholder="Enter player name"
+          className="mr-2"
+          disabled={topTenPlayers?.length >= 10 || isAddingPlayer}
         />
+        <Button
+          onClick={handleAddPlayer}
+          disabled={topTenPlayers?.length >= 10 || isAddingPlayer}
+        >
+          {isAddingPlayer ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            "Add Player"
+          )}
+        </Button>
       </div>
 
-      {rankedPlayers.length > 0 && (
-        <div className="flex justify-end">
-          <Button onClick={handleSave}>Save rankings</Button>
+      {topTenPlayers?.length >= 10 && (
+        <div className="text-sm text-muted-foreground">
+          You have reached the maximum of 10 players.
         </div>
       )}
 
-      {/* Replace player dialog when stack is full */}
-      <Dialog open={isReplaceOpen} onOpenChange={setIsReplaceOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              {candidateToAdd ? `Replace a player with ${candidateToAdd.name}` : "Replace a player"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2 max-h-[60vh] overflow-auto">
-            <p className="text-sm text-muted-foreground mb-4">
-              Your rankings are full. Choose which player to replace:
-            </p>
-            {rankedPlayers.map((player, index) => (
-              <Button
-                key={player.id}
-                variant="outline"
-                className="w-full justify-start h-auto py-3"
-                onClick={() => handleReplacePlayer(index)}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-xs font-semibold">
-                    {index + 1}
-                  </div>
-                  <div className="text-left">
-                    <div className="text-sm font-medium">{player.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {player.team ?? "—"} • {player.position ?? "—"}
-                    </div>
-                  </div>
-                </div>
-              </Button>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
+      {topTenPlayers?.length === 0 ? (
+        <div className="text-center text-muted-foreground">
+          No players added yet. Add some players to create your Top 10!
+        </div>
+      ) : (
+        <DragDropContext onDragEnd={onDragEnd}>
+          <Droppable droppableId="players">
+            {(provided) => (
+              <ul {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
+                {topTenPlayers?.map((player, index) => (
+                  <Draggable key={player.id} draggableId={String(player.id)} index={index}>
+                    {(provided) => (
+                      <li
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        {...provided.dragHandleProps}
+                        className="flex items-center justify-between px-4 py-2 bg-white rounded-md shadow-sm border border-gray-200"
+                      >
+                        <div className="flex items-center">
+                          <GripVertical className="mr-2 h-5 w-5 text-gray-400 cursor-move" />
+                          <span>{index + 1}. {player.name}</span>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => handleDeletePlayer(player.id)}
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="lucide lucide-trash"
+                          >
+                            <path d="M3 6h18" />
+                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                          </svg>
+                        </Button>
+                      </li>
+                    )}
+                  </Draggable>
+                ))}
+                {provided.placeholder}
+              </ul>
+            )}
+          </Droppable>
+        </DragDropContext>
+      )}
     </div>
   );
 };
