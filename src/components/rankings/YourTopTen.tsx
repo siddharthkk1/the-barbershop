@@ -1,7 +1,8 @@
+
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import DraggablePlayerItem from "./DraggablePlayerItem";
 import PlayerSearch from "./PlayerSearch";
@@ -25,8 +26,9 @@ import {
 interface Player {
   id: string;
   name: string;
-  team: string;
-  image_url: string;
+  team: string | null;
+  position: string | null;
+  image_url?: string | null;
 }
 
 interface YourTopTenProps {
@@ -39,7 +41,6 @@ interface YourTopTenProps {
 const YourTopTen = ({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTenProps) => {
   const { toast } = useToast();
   const [rankings, setRankings] = useState<Player[]>([]);
-  const [availablePlayers, setAvailablePlayers] = useState<Player[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
 
@@ -53,11 +54,21 @@ const YourTopTen = ({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTen
 
   const fetchUserRankings = async (userId: string) => {
     try {
+      // Fetch user rankings joined with player data
       const { data, error } = await supabase
         .from("user_rankings")
-        .select("rankings")
+        .select(`
+          rank_position,
+          nba_players (
+            id,
+            name,
+            team,
+            position,
+            image_url
+          )
+        `)
         .eq("user_id", userId)
-        .single();
+        .order("rank_position", { ascending: true });
 
       if (error) {
         console.error("Error fetching user rankings:", error);
@@ -66,13 +77,24 @@ const YourTopTen = ({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTen
           description: "Failed to retrieve your rankings. Please try again.",
           variant: "destructive",
         });
+        return;
       }
 
-      if (data && data.rankings) {
-        // Ensure the fetched rankings are of the correct type (Player[])
-        setRankings(data.rankings as Player[]);
+      if (data) {
+        // Transform the data to match our Player interface
+        const playerRankings = data
+          .filter(item => item.nba_players) // Filter out any null player references
+          .map(item => ({
+            id: item.nba_players.id,
+            name: item.nba_players.name,
+            team: item.nba_players.team,
+            position: item.nba_players.position,
+            image_url: item.nba_players.image_url,
+          }));
+        
+        setRankings(playerRankings);
       } else {
-        setRankings([]); // Initialize with an empty array if no data is found
+        setRankings([]);
       }
     } catch (error) {
       console.error("Unexpected error fetching user rankings:", error);
@@ -105,17 +127,22 @@ const YourTopTen = ({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTen
 
     setIsSaving(true);
     try {
-      // Upsert the user rankings
+      // First, delete existing rankings for this user
+      await supabase
+        .from("user_rankings")
+        .delete()
+        .eq("user_id", userId);
+
+      // Then insert new rankings
+      const rankingData = rankings.map((player, index) => ({
+        user_id: userId,
+        player_id: player.id,
+        rank_position: index + 1,
+      }));
+
       const { error } = await supabase
         .from("user_rankings")
-        .upsert(
-          {
-            user_id: userId,
-            rankings: rankings,
-            updated_at: new Date(),
-          },
-          { onConflict: "user_id" }
-        );
+        .insert(rankingData);
 
       if (error) {
         console.error("Error saving rankings:", error);
@@ -175,12 +202,10 @@ const YourTopTen = ({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTen
     }
 
     setRankings([...rankings, player]);
-    setAvailablePlayers(availablePlayers.filter((p) => p.id !== player.id));
   };
 
-  const removePlayer = (playerToRemove: Player) => {
-    setRankings(rankings.filter((player) => player.id !== playerToRemove.id));
-    setAvailablePlayers([...availablePlayers, playerToRemove]);
+  const removePlayer = (playerId: string) => {
+    setRankings(rankings.filter((player) => player.id !== playerId));
   };
 
   const clearRankings = async () => {
@@ -251,9 +276,12 @@ const YourTopTen = ({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTen
     );
   }
 
+  // Create a set of player IDs that are already in rankings for PlayerSearch
+  const rankedPlayerIds = new Set(rankings.map(player => player.id));
+
   return (
     <div className="space-y-6">
-      <PlayerSearch onSelectPlayer={addPlayer} />
+      <PlayerSearch onAdd={addPlayer} disabledIds={rankedPlayerIds} />
 
       {rankings.length > 0 ? (
         <DndContext
@@ -269,9 +297,8 @@ const YourTopTen = ({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTen
               {rankings.map((player, index) => (
                 <DraggablePlayerItem
                   key={player.id}
-                  id={player.id}
                   player={player}
-                  rank={index + 1}
+                  position={index + 1}
                   onRemove={removePlayer}
                 />
               ))}
