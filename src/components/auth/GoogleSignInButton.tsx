@@ -1,9 +1,9 @@
-
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 declare global {
   interface Window {
@@ -148,36 +148,32 @@ const GoogleSignInButton = ({ onSuccess, onError, disabled }: GoogleSignInButton
 
   if (hasError) {
     return (
-      <div className="w-full p-4 border border-destructive/20 rounded-lg bg-destructive/5">
-        <div className="flex items-center gap-3 text-destructive">
-          <AlertCircle className="h-5 w-5 flex-shrink-0" />
-          <div>
-            <p className="font-medium">Google Sign-In Unavailable</p>
-            <p className="text-sm text-muted-foreground mt-1">{errorMessage}</p>
-          </div>
-        </div>
+      <div className="w-full">
+        <Button variant="outline" disabled className="w-full">
+          <AlertCircle className="mr-2 h-4 w-4" />
+          Google Sign-In Unavailable
+        </Button>
+        <p className="text-xs text-muted-foreground text-center mt-2">{errorMessage}</p>
       </div>
     );
   }
 
   if (isLoading) {
     return (
-      <div className="w-full">
-        <Skeleton className="h-12 w-full rounded-lg" />
-        <p className="text-sm text-muted-foreground text-center mt-2">Loading Google Sign-In...</p>
+      <div className="w-full space-y-2">
+        <Skeleton className="h-11 w-full rounded-md" />
+        <p className="text-xs text-muted-foreground text-center">Loading Google Sign-In...</p>
       </div>
     );
   }
 
   return (
     <div className="w-full">
-      <div className="bg-white border-2 border-gray-200 rounded-lg p-1 shadow-sm hover:shadow-md transition-shadow">
-        <div
-          ref={buttonRef}
-          className={`w-full ${disabled ? "opacity-50 pointer-events-none" : ""}`}
-          style={{ opacity: disabled ? 0.5 : 1 }}
-        />
-      </div>
+      <div
+        ref={buttonRef}
+        className={`w-full ${disabled ? "opacity-50 pointer-events-none" : ""}`}
+        style={{ opacity: disabled ? 0.5 : 1 }}
+      />
     </div>
   );
 };
