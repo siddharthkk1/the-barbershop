@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,6 +7,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Loader2 } from "lucide-react";
 import PlayerSearch, { Player } from "./PlayerSearch";
 import DraggablePlayerItem from "./DraggablePlayerItem";
+import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
+import CustomGoogleButton from "@/components/auth/CustomGoogleButton";
 import {
   DndContext,
   closestCenter,
@@ -38,6 +39,7 @@ type YourTopTenProps = {
 
 const YourTopTen = ({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTenProps) => {
   const { toast } = useToast();
+  const [useOfficialButton, setUseOfficialButton] = useState(true);
 
   console.log("[YourTopTen] Rendered with userId:", userId, "userEmail:", userEmail);
 
@@ -97,7 +99,6 @@ const YourTopTen = ({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTen
       setCandidateToAdd(player);
       setIsReplaceOpen(true);
     } else {
-      // Add player to the bottom of the list
       setPlayerIds(prev => [...prev, player.id]);
     }
   };
@@ -139,7 +140,6 @@ const YourTopTen = ({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTen
 
     console.log("[YourTopTen] Saving rankings for user:", userId);
 
-    // Delete existing rankings for this user
     const { error: delErr } = await supabase
       .from("user_rankings")
       .delete()
@@ -157,7 +157,6 @@ const YourTopTen = ({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTen
       return;
     }
 
-    // Insert the new list
     const rows = playerIds.map((player_id, index) => ({
       user_id: userId,
       rank_position: index + 1,
@@ -178,6 +177,16 @@ const YourTopTen = ({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTen
     rankingsQuery.refetch();
   };
 
+  const handleGoogleSignInSuccess = () => {
+    console.log("[YourTopTen] Google sign-in successful");
+  };
+
+  const handleGoogleSignInError = (error: any) => {
+    console.error("[YourTopTen] Google sign-in error:", error);
+    // Fallback to custom button if official button fails
+    setUseOfficialButton(false);
+  };
+
   // Authentication status display - show sign-in button in card when not signed in
   if (!userId) {
     console.log("[YourTopTen] Rendering sign-in UI");
@@ -187,16 +196,21 @@ const YourTopTen = ({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTen
           <p className="text-muted-foreground mb-4">
             Sign in to create and save your Top 10 rankings.
           </p>
-          <Button
-            onClick={onGoogleSignIn}
-            variant="default"
-            size="sm"
-            disabled={isLoading}
-            className="shadow-sm"
-          >
-            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Sign in with Google
-          </Button>
+          <div className="max-w-sm mx-auto">
+            {useOfficialButton ? (
+              <GoogleSignInButton
+                onSuccess={handleGoogleSignInSuccess}
+                onError={handleGoogleSignInError}
+                disabled={isLoading}
+              />
+            ) : (
+              <CustomGoogleButton
+                onClick={onGoogleSignIn}
+                isLoading={isLoading}
+                disabled={isLoading}
+              />
+            )}
+          </div>
         </div>
       </div>
     );
