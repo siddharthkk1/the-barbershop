@@ -301,8 +301,8 @@ const YourTopTen = ({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTen
               </Button>
             ))}
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
