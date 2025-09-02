@@ -1,15 +1,32 @@
-import { useState, useEffect } from "react";
+
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { reorderPlayers } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { DragDropContext, Droppable, Draggable, DropResult } from "react-beautiful-dnd";
-import { Loader2, User, GripVertical } from "lucide-react";
+import { Loader2, User } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
 import CustomGoogleButton from "@/components/auth/CustomGoogleButton";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import {
+  restrictToVerticalAxis,
+} from "@dnd-kit/modifiers";
+import DraggablePlayerItem from "./DraggablePlayerItem";
 
 interface YourTopTenProps {
   userId: string | null;
@@ -18,10 +35,21 @@ interface YourTopTenProps {
   onGoogleSignIn: () => void;
 }
 
+interface UserRanking {
+  id: string;
+  user_id: string;
+  player_id: string;
+  rank_position: number;
+  created_at: string;
+  updated_at: string;
+}
+
 interface Player {
-  id: number;
+  id: string;
   name: string;
-  ranking: number | null;
+  team: string | null;
+  position: string | null;
+  image_url?: string | null;
 }
 
 const YourTopTen = ({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTenProps) => {
@@ -30,27 +58,71 @@ const YourTopTen = ({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTen
   const [playerName, setPlayerName] = useState("");
   const [isAddingPlayer, setIsAddingPlayer] = useState(false);
 
-  // Fetch user's top ten players
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  // Fetch user's rankings with player details
   const {
-    data: topTenPlayers,
-    isLoading: isLoadingTopTen,
-    isError: isErrorTopTen,
-    error: errorTopTen,
-  } = useQuery<Player[]>({
-    queryKey: ["topTenPlayers", userId],
+    data: userRankings,
+    isLoading: isLoadingRankings,
+    isError: isErrorRankings,
+    error: errorRankings,
+  } = useQuery({
+    queryKey: ["userRankings", userId],
     queryFn: async () => {
       if (!userId) return [];
+      
       const { data, error } = await supabase
-        .from("top_ten_players")
-        .select("*")
+        .from("user_rankings")
+        .select(`
+          id,
+          user_id,
+          player_id,
+          rank_position,
+          created_at,
+          updated_at
+        `)
         .eq("user_id", userId)
-        .order("ranking", { ascending: true });
+        .order("rank_position", { ascending: true });
 
       if (error) {
-        console.error("Error fetching top ten players:", error);
+        console.error("Error fetching user rankings:", error);
         throw error;
       }
-      return data || [];
+
+      // Get player details for each ranking
+      if (!data || data.length === 0) return [];
+      
+      const playerIds = data.map(r => r.player_id);
+      const { data: playersData, error: playersError } = await supabase
+        .from("nba_players")
+        .select("id, name, team, position, image_url")
+        .in("id", playerIds);
+
+      if (playersError) {
+        console.error("Error fetching players:", playersError);
+        throw playersError;
+      }
+
+      // Combine rankings with player data
+      return data.map(ranking => {
+        const player = playersData?.find(p => p.id === ranking.player_id);
+        return {
+          rankingId: ranking.id,
+          player: player ? {
+            id: player.id,
+            name: player.name,
+            team: player.team,
+            position: player.position,
+            image_url: player.image_url,
+          } : null,
+          rank_position: ranking.rank_position,
+        };
+      }).filter(item => item.player !== null);
     },
     enabled: !!userId,
     retry: false,
@@ -60,57 +132,82 @@ const YourTopTen = ({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTen
   const addPlayerMutation = useMutation({
     mutationFn: async (name: string) => {
       if (!userId) throw new Error("User not authenticated");
-      const nextRanking = (topTenPlayers?.length || 0) + 1;
+      
+      // First, search for the player in nba_players
+      const { data: existingPlayers, error: searchError } = await supabase
+        .from("nba_players")
+        .select("id, name, team, position, image_url")
+        .ilike("name", `%${name}%`)
+        .limit(1);
+
+      if (searchError) throw searchError;
+
+      let playerId: string;
+      
+      if (existingPlayers && existingPlayers.length > 0) {
+        playerId = existingPlayers[0].id;
+      } else {
+        // Create new player if not found
+        const { data: newPlayer, error: createError } = await supabase
+          .from("nba_players")
+          .insert([{ name, team: null, position: null }])
+          .select("id")
+          .single();
+
+        if (createError) throw createError;
+        playerId = newPlayer.id;
+      }
+
+      // Add to user rankings
+      const nextRankPosition = (userRankings?.length || 0) + 1;
       const { data, error } = await supabase
-        .from("top_ten_players")
-        .insert([{ user_id: userId, name, ranking: nextRanking }])
+        .from("user_rankings")
+        .insert([{ 
+          user_id: userId, 
+          player_id: playerId, 
+          rank_position: nextRankPosition 
+        }])
         .select("*")
         .single();
 
-      if (error) {
-        console.error("Error adding player:", error);
-        throw error;
-      }
+      if (error) throw error;
       return data;
     },
-    onMutate: async (name: string) => {
+    onMutate: async () => {
       setIsAddingPlayer(true);
-      await queryClient.cancelQueries({ queryKey: ["topTenPlayers", userId] });
-      const optimisticUpdate = [...(topTenPlayers || []), { id: -1, name, ranking: (topTenPlayers?.length || 0) + 1 }];
-      queryClient.setQueryData(["topTenPlayers", userId], optimisticUpdate);
-      return { optimisticUpdate };
     },
-    onError: (_error, _name, context: any) => {
+    onError: (error: any) => {
       toast({
         title: "Failed to add player",
-        description: "Please try again.",
+        description: error.message || "Please try again.",
         variant: "destructive",
       });
-      queryClient.setQueryData(["topTenPlayers", userId], context.optimisticUpdate);
     },
     onSettled: () => {
       setIsAddingPlayer(false);
-      queryClient.invalidateQueries({ queryKey: ["topTenPlayers", userId] });
+      queryClient.invalidateQueries({ queryKey: ["userRankings", userId] });
     },
   });
 
-  // Update player rankings mutation
+  // Update rankings mutation
   const updateRankingsMutation = useMutation({
-    mutationFn: async (updates: { id: number; ranking: number | null }[]) => {
+    mutationFn: async (updates: { rankingId: string; rank_position: number }[]) => {
       if (!userId) throw new Error("User not authenticated");
-      const { data, error } = await supabase
-        .from("top_ten_players")
-        .upsert(
-          updates.map(({ id, ranking }) => ({ id, ranking, user_id: userId })),
-          { onConflict: "id" }
-        )
-        .select("*");
+      
+      const promises = updates.map(({ rankingId, rank_position }) =>
+        supabase
+          .from("user_rankings")
+          .update({ rank_position })
+          .eq("id", rankingId)
+          .eq("user_id", userId)
+      );
 
-      if (error) {
-        console.error("Error updating rankings:", error);
-        throw error;
+      const results = await Promise.all(promises);
+      const errors = results.filter(result => result.error);
+      
+      if (errors.length > 0) {
+        throw new Error("Failed to update rankings");
       }
-      return data;
     },
     onError: () => {
       toast({
@@ -120,35 +217,29 @@ const YourTopTen = ({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTen
       });
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["topTenPlayers", userId] });
+      queryClient.invalidateQueries({ queryKey: ["userRankings", userId] });
     },
   });
 
   // Delete player mutation
   const deletePlayerMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const { error } = await supabase.from("top_ten_players").delete().eq("id", id);
-      if (error) {
-        console.error("Error deleting player:", error);
-        throw error;
-      }
+    mutationFn: async (rankingId: string) => {
+      const { error } = await supabase
+        .from("user_rankings")
+        .delete()
+        .eq("id", rankingId);
+      
+      if (error) throw error;
     },
-    onMutate: async (id: number) => {
-      await queryClient.cancelQueries({ queryKey: ["topTenPlayers", userId] });
-      const optimisticUpdate = (topTenPlayers || []).filter((player) => player.id !== id);
-      queryClient.setQueryData(["topTenPlayers", userId], optimisticUpdate);
-      return { optimisticUpdate };
-    },
-    onError: (_error, id, context: any) => {
+    onError: (error: any) => {
       toast({
         title: "Failed to delete player",
-        description: "Please try again.",
+        description: error.message || "Please try again.",
         variant: "destructive",
       });
-      queryClient.setQueryData(["topTenPlayers", userId], context.optimisticUpdate);
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["topTenPlayers", userId] });
+      queryClient.invalidateQueries({ queryKey: ["userRankings", userId] });
     },
   });
 
@@ -167,9 +258,9 @@ const YourTopTen = ({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTen
     }
   };
 
-  const handleDeletePlayer = async (id: number) => {
+  const handleDeletePlayer = async (rankingId: string) => {
     try {
-      await deletePlayerMutation.mutateAsync(id);
+      await deletePlayerMutation.mutateAsync(rankingId);
     } catch (error: any) {
       toast({
         title: "Failed to delete player",
@@ -179,35 +270,35 @@ const YourTopTen = ({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTen
     }
   };
 
-  const onDragEnd = async (result: DropResult) => {
-    if (!result.destination) return;
+  const handleDragEnd = async (event: any) => {
+    const { active, over } = event;
 
-    const items = reorderPlayers(
-      topTenPlayers || [],
-      result.source.index,
-      result.destination.index
-    );
+    if (active.id !== over?.id && userRankings) {
+      const oldIndex = userRankings.findIndex(item => item.rankingId === active.id);
+      const newIndex = userRankings.findIndex(item => item.rankingId === over.id);
 
-    // Prepare updates for Supabase
-    const updates = items.map((player: any, index: number) => ({
-      id: player.id,
-      ranking: index + 1,
-    }));
+      const newOrder = arrayMove(userRankings, oldIndex, newIndex);
+      
+      // Update positions
+      const updates = newOrder.map((item, index) => ({
+        rankingId: item.rankingId,
+        rank_position: index + 1,
+      }));
 
-    // Optimistically update the UI
-    queryClient.setQueryData(["topTenPlayers", userId], items);
+      // Optimistically update the UI
+      queryClient.setQueryData(["userRankings", userId], newOrder);
 
-    try {
-      // Call the updateRankingsMutation to update the rankings in Supabase
-      await updateRankingsMutation.mutateAsync(updates);
-    } catch (error: any) {
-      // If the mutation fails, revert the UI to the previous state
-      queryClient.setQueryData(["topTenPlayers", userId], topTenPlayers);
-      toast({
-        title: "Failed to update rankings",
-        description: error.message || "Please try again.",
-        variant: "destructive",
-      });
+      try {
+        await updateRankingsMutation.mutateAsync(updates);
+      } catch (error: any) {
+        // Revert on error
+        queryClient.setQueryData(["userRankings", userId], userRankings);
+        toast({
+          title: "Failed to update rankings",
+          description: error.message || "Please try again.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -248,7 +339,7 @@ const YourTopTen = ({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTen
     );
   }
 
-  if (isLoadingTopTen) {
+  if (isLoadingRankings) {
     return (
       <div className="space-y-4">
         {[...Array(3)].map((_, i) => (
@@ -264,96 +355,84 @@ const YourTopTen = ({ userId, userEmail, isLoading, onGoogleSignIn }: YourTopTen
     );
   }
 
-  if (isErrorTopTen) {
+  if (isErrorRankings) {
     return (
       <div className="text-center text-red-500">
-        Error: {errorTopTen?.message || "Failed to load players"}
+        Error: {errorRankings?.message || "Failed to load rankings"}
       </div>
     );
   }
 
+  const canAddMore = (userRankings?.length || 0) < 10;
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center">
+      <div className="flex items-center gap-2">
         <Input
           type="text"
           value={playerName}
           onChange={(e) => setPlayerName(e.target.value)}
           placeholder="Enter player name"
-          className="mr-2"
-          disabled={topTenPlayers?.length >= 10 || isAddingPlayer}
+          className="flex-1"
+          disabled={!canAddMore || isAddingPlayer}
+          onKeyPress={(e) => {
+            if (e.key === 'Enter') {
+              handleAddPlayer();
+            }
+          }}
         />
         <Button
           onClick={handleAddPlayer}
-          disabled={topTenPlayers?.length >= 10 || isAddingPlayer}
+          disabled={!canAddMore || isAddingPlayer}
         >
           {isAddingPlayer ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            "Add Player"
-          )}
+          ) : null}
+          Add Player
         </Button>
       </div>
 
-      {topTenPlayers?.length >= 10 && (
+      {!canAddMore && (
         <div className="text-sm text-muted-foreground">
           You have reached the maximum of 10 players.
         </div>
       )}
 
-      {topTenPlayers?.length === 0 ? (
-        <div className="text-center text-muted-foreground">
+      {!userRankings || userRankings.length === 0 ? (
+        <div className="text-center text-muted-foreground py-8">
           No players added yet. Add some players to create your Top 10!
         </div>
       ) : (
-        <DragDropContext onDragEnd={onDragEnd}>
-          <Droppable droppableId="players">
-            {(provided) => (
-              <ul {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
-                {topTenPlayers?.map((player, index) => (
-                  <Draggable key={player.id} draggableId={String(player.id)} index={index}>
-                    {(provided) => (
-                      <li
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        {...provided.dragHandleProps}
-                        className="flex items-center justify-between px-4 py-2 bg-white rounded-md shadow-sm border border-gray-200"
-                      >
-                        <div className="flex items-center">
-                          <GripVertical className="mr-2 h-5 w-5 text-gray-400 cursor-move" />
-                          <span>{index + 1}. {player.name}</span>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={() => handleDeletePlayer(player.id)}
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="20"
-                            height="20"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="lucide lucide-trash"
-                          >
-                            <path d="M3 6h18" />
-                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                          </svg>
-                        </Button>
-                      </li>
-                    )}
-                  </Draggable>
-                ))}
-                {provided.placeholder}
-              </ul>
-            )}
-          </Droppable>
-        </DragDropContext>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+          modifiers={[restrictToVerticalAxis]}
+        >
+          <SortableContext
+            items={userRankings.map(item => item.rankingId)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="space-y-2">
+              {userRankings.map((item, index) => (
+                item.player ? (
+                  <DraggablePlayerItem
+                    key={item.rankingId}
+                    player={{
+                      id: item.rankingId,
+                      name: item.player.name,
+                      team: item.player.team,
+                      position: item.player.position,
+                      image_url: item.player.image_url,
+                    }}
+                    position={index + 1}
+                    onRemove={() => handleDeletePlayer(item.rankingId)}
+                  />
+                ) : null
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
     </div>
   );
