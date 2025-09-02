@@ -73,59 +73,64 @@ const Rankings = () => {
   const componentKey = `auth-${userId || 'anonymous'}-${authStateLoaded}`;
 
   return (
-    <div key={componentKey} className="container mx-auto px-4 py-10 animate-fade-in relative">
-      {/* Authentication status in top-right corner - only when signed in */}
+    <>
+      {/* Authentication status in top-right corner - positioned absolutely */}
       {userId && authStateLoaded && (
-        <div className="fixed top-4 right-4 z-50">
-          <div className="flex items-center gap-3 px-4 py-2 bg-green-50 border border-green-200 rounded-lg shadow-sm">
+        <div className="fixed top-6 right-6 z-[9999]">
+          <div className="flex items-center gap-3 px-4 py-2 bg-white border border-gray-200 rounded-lg shadow-lg backdrop-blur-sm">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              <span className="text-sm font-medium text-green-800 hidden sm:inline">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-sm font-medium text-gray-800 hidden sm:inline">
                 {userEmail}
               </span>
+              <span className="text-sm font-medium text-gray-800 sm:hidden">
+                Signed in
+              </span>
             </div>
-            <Button variant="ghost" size="sm" onClick={handleSignOut}>
+            <Button variant="ghost" size="sm" onClick={handleSignOut} className="text-xs h-7 px-2">
               Sign out
             </Button>
           </div>
         </div>
       )}
 
-      <div className="mb-8 text-center">
-        <h1 className="text-3xl font-bold tracking-tight">Top 10 NBA Player Rankings</h1>
-        <p className="text-muted-foreground mt-2">
-          See the community&apos;s collective Top 10 and submit your own rankings.
-        </p>
-      </div>
+      <div key={componentKey} className="container mx-auto px-4 py-10 animate-fade-in relative">
+        <div className="mb-8 text-center">
+          <h1 className="text-3xl font-bold tracking-tight">Top 10 NBA Player Rankings</h1>
+          <p className="text-muted-foreground mt-2">
+            See the community&apos;s collective Top 10 and submit your own rankings.
+          </p>
+        </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="h-full">
-          <CardHeader>
-            <CardTitle>Collective Top 10</CardTitle>
-            <CardDescription>Calculated from all user rankings</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <CollectiveTopTen />
-          </CardContent>
-        </Card>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card className="h-full">
+            <CardHeader>
+              <CardTitle>Collective Top 10</CardTitle>
+              <CardDescription>Calculated from all user rankings</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <CollectiveTopTen />
+            </CardContent>
+          </Card>
 
-        <Card className="h-full">
-          <CardHeader>
-            <CardTitle>Your Top 10</CardTitle>
-            <CardDescription>Create and manage your personal rankings</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <YourTopTen 
-              key={`your-top-ten-${componentKey}`}
-              userId={userId}
-              userEmail={userEmail}
-              isLoading={isLoading}
-              onGoogleSignIn={handleGoogleSignIn}
-            />
-          </CardContent>
-        </Card>
+          <Card className="h-full">
+            <CardHeader>
+              <CardTitle>Your Top 10</CardTitle>
+              <CardDescription>Create and manage your personal rankings</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <YourTopTen 
+                key={`your-top-ten-${componentKey}`}
+                userId={userId}
+                userEmail={userEmail}
+                isLoading={isLoading}
+                onGoogleSignIn={handleGoogleSignIn}
+              />
+            </CardContent>
+          </Card>
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 
